@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run care-health frontend",
+			"type": "shell",
+			"command": "npm install; if ($LASTEXITCODE -eq 0) { npm run dev -- --host 0.0.0.0 }",
+			"args": [],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
