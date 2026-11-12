@@ -38,9 +38,9 @@ const initialCaregivers = [
 ];
 
 const initialRequests = [
-  { id: "CR-1025", elderly: "Lê Văn Cẩn", type: "Vật lý trị liệu", location: "Phú Bài, Huế", date: "06/10/2026", time: "14:00 - 16:00", registered: 0, status: "Chờ nhận đăng ký", isApplied: false },
-  { id: "CR-1024", elderly: "Nguyễn Văn Bình", type: "Chăm sóc tại nhà", location: "Vỹ Dạ, Huế", date: "04/10/2026", time: "08:00 - 12:00", registered: 3, status: "Có người đăng ký", isApplied: true },
-  { id: "CR-1023", elderly: "Trần Thị Hoa", type: "Hỗ trợ sinh hoạt", location: "An Cựu, Huế", date: "05/10/2026", time: "13:00 - 17:00", registered: 1, status: "Đã chọn người chăm sóc", isApplied: false },
+  { id: "CR-1025", elderly: "Lê Văn Cẩn", type: "Vật lý trị liệu", location: "Phú Bài, Huế", date: "06/10/2026", time: "14:00 - 16:00", registered: 0, applicants: [], owner: "Nguyễn Minh An", status: "Chờ nhận đăng ký", isApplied: false },
+  { id: "CR-1024", elderly: "Nguyễn Văn Bình", type: "Chăm sóc tại nhà", location: "Vỹ Dạ, Huế", date: "04/10/2026", time: "08:00 - 12:00", registered: 3, applicants: ["Nguyễn Thị Lan", "Trần Minh Anh", "Lê Thị Hương"], owner: "Nguyễn Minh An", status: "Có người đăng ký", isApplied: true },
+  { id: "CR-1023", elderly: "Trần Thị Hoa", type: "Hỗ trợ sinh hoạt", location: "An Cựu, Huế", date: "05/10/2026", time: "13:00 - 17:00", registered: 1, applicants: ["Trần Minh Anh"], selectedCaregiver: "Trần Minh Anh", owner: "Nguyễn Minh An", status: "Đã chọn người chăm sóc", isApplied: false },
 ];
 
 const initialSchedules = [
@@ -296,14 +296,28 @@ function App() {
       <header className="topbar"><button className="mobile-menu" onClick={() => setMobile(!mobile)}><Menu /></button><div className="breadcrumb">CareConnect <ChevronRight size={15} /><b>{currentNav.find(x => x[0] === page)?.[1] || "Tổng quan"}</b></div><div className="top-actions"><button className="icon-btn" onClick={() => go(role === "admin" ? "notifications-admin" : "notifications")}><Bell size={19} /><i /></button><button className="user-mini" onClick={() => go("profile")} title="Mở hồ sơ cá nhân"><div className="avatar">NA</div><div><b>{role === "admin" ? "Quản trị viên" : role === "caregiver" ? "Nguyễn Thị Lan" : "Nguyễn Minh An"}</b><small>{role === "admin" ? "ADMIN" : role === "caregiver" ? "NGƯỜI CHĂM SÓC" : "NGƯỜI CẦN CHĂM SÓC/NGƯỜI THÂN"}</small></div></button></div></header>
       <div className="content">{renderPage()}</div>
     </main>
-    {modal && <Modal title={modal.title} onClose={() => setModal(null)}><ModalContent type={modal.type} data={selected} reviews={reviews} onSave={(data) => handleSave(modal.type, data)} onClose={() => setModal(null)} notify={notify} /></Modal>}
+    {modal && <Modal title={modal.title} onClose={() => setModal(null)}><ModalContent type={modal.type} data={selected} reviews={reviews} elderly={elderly} caregivers={caregivers} role={role} onAccept={(id,name) => {setRequests(xs=>xs.map(x=>x.id===id ? {...x,selectedCaregiver:name,status:"Đã chọn người chăm sóc"}:x)); notify("Đã chấp nhận người chăm sóc")}} onReject={(id,name) => {setRequests(xs=>xs.map(x=>x.id===id ? {...x,applicants:(x.applicants||[]).filter(n=>n!==name),registered:Math.max(0,(x.applicants||[]).length-1),status:(x.applicants||[]).length<=1?"Chờ nhận đăng ký":"Có người đăng ký"}:x)); notify("Đã từ chối người chăm sóc")}} onSave={(data) => handleSave(modal.type, data)} onClose={() => setModal(null)} notify={notify} /></Modal>}
     {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
   </div></>;
 
   function handleSave(type, data) {
     if (type === "elderly") { setElderly(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...data } : a) : [...x, { ...data, id: Date.now() }]); }
     if (type === "care-profile") { setCaregivers(x => x.map(a => a.id === 1 ? { ...a, ...data } : a)); }
-    if (type === "request") { setRequests(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...data } : a) : [...x, { ...data, id: "CR-" + (1025 + x.length), registered: 0, status: "Chờ nhận đăng ký" }]); }
+    if (type === "request") {
+      const start = new Date(data.startTime), end = new Date(data.endTime);
+      if (!data.elderly && elderly.length) data = {...data, elderly:elderly[0].name};
+      const fields = [["elderly","Người cao tuổi"],["title","Tiêu đề yêu cầu"],["description","Mô tả nhu cầu chăm sóc"],["location","Địa điểm chăm sóc"],["startTime","Thời gian bắt đầu"],["endTime","Thời gian kết thúc"]];
+      const missing = fields.find(([k]) => !String(data[k] || "").trim());
+      if (missing) { notify(`Vui lòng nhập ${missing[1]}`); return; }
+      if (!selected && start.getTime() < Date.now()) { notify("Thời gian bắt đầu không được nằm trong quá khứ"); return; }
+      if (!(end > start)) { notify("Thời gian kết thúc phải sau thời gian bắt đầu"); return; }
+      if (data.expectedPrice !== "" && data.expectedPrice != null && (+data.expectedPrice < 0 || !Number.isFinite(+data.expectedPrice))) { notify("Mức giá dự kiến không hợp lệ"); return; }
+      if (selected && !["Chờ nhận đăng ký", "Có người đăng ký"].includes(selected.status)) { notify("Yêu cầu ở trạng thái này không thể cập nhật"); return; }
+      const displayDate = start.toLocaleDateString("vi-VN");
+      const clock = d => d.toLocaleTimeString("vi-VN", {hour:"2-digit",minute:"2-digit"});
+      const normalized = {...data, type:data.title.trim(), date:displayDate, time:`${clock(start)} - ${clock(end)}`};
+      setRequests(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...normalized } : a) : [...x, { ...normalized, id: "CR-" + Date.now(), registered: 0, applicants: [], owner:"Nguyễn Minh An", status: "Chờ nhận đăng ký", isApplied: false }]);
+    }
     if (type === "schedule") { setSchedules(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...data } : a) : [...x, { ...data, id: "SC-" + (503 + x.length), owner: "Nguyễn Minh An", status: "Chờ xác nhận", checkIn: "Chưa check-in", checkOut: "Chưa check-out" }]); }
     if (type === "user") { setUsers(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...data } : a) : [...x, { ...data, id: Date.now() }]); }
     if (type === "post") { setPosts(x => selected ? x.map(a => a.id === selected.id ? { ...a, ...data } : a) : [...x, { ...data, id: Date.now(), status: "Bản nháp", date: "01/10/2026", author: "Admin" }]); }
@@ -316,6 +330,16 @@ function App() {
       if (!data?.reason?.trim() || !data?.detail?.trim()) { notify("Vui lòng nhập loại sự cố và mô tả chi tiết"); return; }
       setIncidents(x => [...x, { id: `SC-INC-${String(x.length + 1).padStart(3, "0")}`, scheduleId: selected.id, elderly: selected.elderly, caregiver: selected.caregiver, reason: data.reason.trim(), detail: data.detail.trim(), reporter: role === "caregiver" ? "Nguyễn Thị Lan" : "Nguyễn Minh An", createdAt: new Date().toLocaleString("vi-VN"), status: "Đã tiếp nhận" }]);
       setModal(null); notify("Đã gửi báo cáo sự cố"); return;
+    }
+    if (type === "violation-process") {
+      if (role !== "admin") {notify("Không có quyền xử lý vi phạm");return;}
+      if (!data.reason?.trim()) {notify("Vui lòng nhập lý do xử lý");return;}
+      if (!data.action) {notify("Vui lòng chọn hình thức xử lý");return;}
+      if (selected?.status === "Đã xử lý") {notify("Báo cáo này đã được xử lý");return;}
+      setReports(xs=>xs.map(x=>x.id===selected.id?{...x,status:"Đã xử lý",resolution:data.reason,action:data.action}:x));
+      setRequests(xs=>xs.map(x=>x.id===selected.requestId?{...x,status:data.action==="Từ chối yêu cầu"?"Bị từ chối":x.status,moderation:`${data.action}: ${data.reason}`}:x));
+      setNotices(xs=>[...xs,{id:Date.now(),title:`Kết quả xử lý yêu cầu ${selected.requestId}`,content:`${data.action}. Lý do: ${data.reason}`,target:"Người thân",status:"Đã gửi"}]);
+      setModal(null);notify("Đã xử lý vi phạm và gửi thông báo");return;
     }
     if (type === "report") {
       setReports(x => [...x, { ...data, id: "RP-" + String(100 + x.length + 1).padStart(3, "0"), reporter: "Nguyễn Thị Lan", status: "Chờ kiểm duyệt", date: "01/10/2026" }]);
@@ -340,13 +364,13 @@ function App() {
       onAdd={() => { setSelected(null); setModal({ type: "request", title: "Tạo yêu cầu chăm sóc" }) }}
       onView={x => { setSelected(x); setModal({ type: "request-detail", title: "Chi tiết yêu cầu chăm sóc" }) }}
       onEdit={x => { setSelected(x); setModal({ type: "request", title: "Cập nhật yêu cầu chăm sóc" }) }}
-      onDelete={id => { setRequests(x => x.filter(a => a.id !== id)); notify("Đã hủy yêu cầu") }}
+      onDelete={id => { setRequests(x => x.map(a => a.id === id ? {...a,status:"Đã hủy"} : a)); notify("Đã hủy yêu cầu") }}
       onRegister={id => {
-        setRequests(x => x.map(a => a.id === id ? { ...a, registered: a.registered + 1, isApplied: true, status: a.status === "Chờ nhận đăng ký" ? "Có người đăng ký" : a.status } : a));
+        setRequests(x => x.map(a => a.id === id && !a.isApplied && ["Chờ nhận đăng ký","Có người đăng ký"].includes(a.status) ? { ...a, applicants:[...new Set([...(a.applicants||[]),"Nguyễn Thị Lan"])], registered: [...new Set([...(a.applicants||[]),"Nguyễn Thị Lan"])].length, isApplied: true, status:"Có người đăng ký" } : a));
         notify("Đã đăng ký nhận yêu cầu");
       }}
       onCancelRegister={id => {
-        setRequests(x => x.map(a => { if (a.id !== id) return a; const registered = Math.max(0, a.registered - 1); return { ...a, registered, isApplied: false, status: registered === 0 && a.status === "Có người đăng ký" ? "Chờ nhận đăng ký" : a.status }; }));
+        setRequests(x => x.map(a => { if (a.id !== id || !["Chờ nhận đăng ký","Có người đăng ký"].includes(a.status)) return a; const applicants = (a.applicants||[]).filter(n=>n!=="Nguyễn Thị Lan"); return { ...a, applicants, registered:applicants.length, isApplied:false, status:applicants.length ? "Có người đăng ký":"Chờ nhận đăng ký" }; }));
         notify("Đã hủy đăng ký nhận yêu cầu");
       }}
       onAccept={id => { setRequests(x => x.map(a => a.id === id ? { ...a, status: "Đã chọn người chăm sóc" } : a)); notify("Đã chọn người chăm sóc") }}
@@ -367,7 +391,7 @@ function App() {
         const sc = schedules.find(a => a.id === id);
         if (!sc || sc.status !== "Chờ xác nhận hoàn thành") return;
         setSchedules(x => x.map(a => a.id === id ? { ...a, status: "Hoàn thành" } : a));
-        notify("Gia đình đã xác nhận ca chăm sóc hoàn thành");
+        notify("Đã hoàn thành! Lịch đã được chuyển vào Lịch sử chăm sóc.");
       }}
       onConfirmIncomplete={id => {
         const sc = schedules.find(a => a.id === id);
@@ -405,7 +429,7 @@ function App() {
     if (page === "reviews-admin") return <AdminReviews data={reviews} onApprove={id => { setReviews(x => x.map(a => a.id === id ? { ...a, status: "Đã duyệt" } : a)); notify("Đã duyệt đánh giá") }} onDelete={id => { setReviews(x => x.filter(a => a.id !== id)); notify("Đã xóa đánh giá") }} />;
     if (page === "notifications-admin") return <AdminNotifications data={notices} onAdd={() => { setSelected(null); setModal({ type: "notice", title: "Tạo thông báo" }) }} onEdit={x => { setSelected(x); setModal({ type: "notice", title: "Cập nhật thông báo" }) }} onDelete={id => { setNotices(x => x.filter(a => a.id !== id)); notify("Đã xóa thông báo") }} />;
     if (page === "content") return <ContentPage data={posts} onAdd={() => { setSelected(null); setModal({ type: "post", title: "Thêm bài viết" }) }} onView={x => { setSelected(x); setModal({ type: "post-detail", title: "Xem bài viết" }) }} onEdit={x => { setSelected(x); setModal({ type: "post", title: "Sửa bài viết" }) }} onDelete={id => { setPosts(x => x.filter(a => a.id !== id)); notify("Đã xóa bài viết") }} />;
-    if (page === "reports-admin") return <ReportsAdmin data={reports} onApprove={id => { const rp = reports.find(a => a.id === id); setReports(x => x.map(a => a.id === id ? { ...a, status: "Đã xử lý" } : a)); if (rp) setRequests(x => x.map(a => a.id === rp.requestId ? { ...a, status: "Đang thực hiện", moderation: "Yêu cầu hợp lệ" } : a)); notify("Đã kiểm duyệt: yêu cầu hợp lệ và được chuyển sang đang thực hiện") }} onReject={id => { const rp = reports.find(a => a.id === id); setReports(x => x.map(a => a.id === id ? { ...a, status: "Đã xử lý" } : a)); if (rp) setRequests(x => x.map(a => a.id === rp.requestId ? { ...a, status: "Bị từ chối", moderation: "Yêu cầu không hợp lệ" } : a)); notify("Đã kiểm duyệt: yêu cầu không hợp lệ") }} onDelete={id => { setReports(x => x.filter(a => a.id !== id)); notify("Đã xóa báo cáo") }} />;
+    if (page === "reports-admin") return <ReportsAdmin data={reports} onProcess={x => { setSelected(x); setModal({type:"violation-process",title:`Xử lý vi phạm - ${x.requestId}`}); }} onDelete={id => { setReports(x => x.filter(a => a.id !== id)); notify("Đã xóa báo cáo"); }} />;
     if (page === "media-admin") return <MediaWebsitePage media={media} websiteInfo={websiteInfo} onMediaAdd={() => { setSelected(null); setModal({ type: "media", title: "Thêm hình ảnh" }) }} onMediaEdit={x => { setSelected(x); setModal({ type: "media", title: "Cập nhật hình ảnh" }) }} onMediaDelete={id => { setMedia(x => x.filter(a => a.id !== id)); notify("Đã xóa hình ảnh") }} onWebsiteEdit={() => { setSelected(websiteInfo); setModal({ type: "website-info", title: "Cập nhật thông tin website" }) }} />;
     if (page === "analytics") return <AnalyticsPage users={users} elderly={elderly} caregivers={caregivers} requests={requests} schedules={schedules} reviews={reviews} />;
     return <Dashboard role={role} go={go} />;
@@ -527,99 +551,44 @@ function CareAdmin({ data, onView, onEdit, onVerify, onSupplement, onToggle, onD
 // Quyền thao tác thay đổi theo role
 // ============================================================
 function RequestsPage({ role, admin, data, onAdd, onView, onEdit, onDelete, onRegister, onCancelRegister, onAccept, onFinalize, onReject, onViewApplicants, onReport, onManageReports, notify }) {
-  return (
-    <>
-      <PageHeader
-        eyebrow={admin ? "ADMIN • YÊU CẦU" : role === "caregiver" ? "CÔNG VIỆC" : "DỊCH VỤ"}
-        title={admin ? "Quản lý yêu cầu chăm sóc" : role === "caregiver" ? "Tìm yêu cầu chăm sóc" : "Yêu cầu của tôi"}
-        desc={admin ? "Quản lý, xem chi tiết và xử lý vi phạm trên hệ thống." : role === "caregiver" ? "Xem danh sách các gia đình đang cần người chăm sóc và đăng ký nhận việc." : "Tạo mới, theo dõi trạng thái và chọn người chăm sóc cho gia đình."}
-        /* ĐÃ SỬA LỖI TẠI ĐÂY: Trả lại đúng nút Tạo yêu cầu */
-        action={!admin && role !== "caregiver" && <Button onClick={onAdd}>Tạo yêu cầu</Button>}
-      />
-
-      <div className="card table-card">
-        <TableHead placeholder="Tìm mã yêu cầu, người cao tuổi, nhu cầu..." />
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Mã</th><th>Người cao tuổi</th><th>Nhu cầu</th><th>Thời gian</th><th>Đăng ký</th><th>Trạng thái</th><th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map(x => (
-                <tr key={x.id}>
-                  <td><b>{x.id}</b></td>
-                  <td>{x.elderly}<small>{x.location}</small></td>
-                  <td>{x.type}</td>
-                  <td>{x.date}<small>{x.time}</small></td>
-                  <td><span className="count-badge">{x.registered} người</span></td>
-                  <td><Status>{x.status}</Status></td>
-                  <td>
-                    <div className="actions">
-                      {/* Nút Xem chi tiết yêu cầu (ai cũng xem được) */}
-                      <button className="action" title="Xem chi tiết yêu cầu" onClick={() => onView(x)}>
-                        <Eye size={16} />
-                      </button>
-
-                      {/* --- THAO TÁC CỦA NGƯỜI THÂN --- */}
-                      {!admin && role !== "caregiver" && (
-                        <>
-                          {!["Đã chọn người chăm sóc", "Đang chờ thực hiện", "Đang thực hiện", "Chờ kiểm duyệt", "Đã hoàn thành", "Bị từ chối", "Đã hủy"].includes(x.status) && (
-                            <button className="action" title="Cập nhật" onClick={() => onEdit(x)}>
-                              <Edit3 size={16} />
-                            </button>
-                          )}
-                          <button className="action danger" title="Hủy yêu cầu" onClick={() => { if (window.confirm(`Hủy yêu cầu ${x.id}?`)) onDelete(x.id) }}>
-                            <X size={16} />
-                          </button>
-
-                          {x.registered > 0 && ["Có người đăng ký", "Chờ nhận đăng ký"].includes(x.status) && (
-                            <button className="action success" title="Xem danh sách người chăm sóc đã đăng ký" onClick={() => onViewApplicants(x)}>
-                              <Users size={16} />
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {/* --- THAO TÁC CỦA NGƯỜI CHĂM SÓC --- */}
-                      {role === "caregiver" && ["Chờ nhận đăng ký", "Có người đăng ký"].includes(x.status) && (
-                        <button
-                          className={"action " + (x.isApplied ? "warning-action" : "success")}
-                          title={x.isApplied ? "Hủy đăng ký nhận ca này" : "Đăng ký nhận ca này"}
-                          onClick={() => x.isApplied ? onCancelRegister(x.id) : onRegister(x.id)}
-                        >
-                          {x.isApplied ? <X size={16} /> : <UserCheck size={16} />}
-                        </button>
-                      )}
-
-                      {role === "caregiver" && ["Chờ nhận đăng ký", "Có người đăng ký"].includes(x.status) && (
-                        <button className="action warning-action" title="Báo cáo vi phạm" onClick={() => onReport(x)}>
-                          <ShieldCheck size={16} />
-                        </button>
-                      )}
-                      {!admin && role !== "caregiver" && x.status === "Đã chọn người chăm sóc" && (
-                        <button className="action success" title="Chốt yêu cầu" onClick={() => onFinalize(x.id)}>
-                          <Check size={16} />
-                        </button>
-                      )}
-
-                      {/* --- THAO TÁC CỦA ADMIN --- */}
-                      {admin && (
-                        <button className="action danger" title="Xử lý yêu cầu vi phạm" onClick={onManageReports}>
-                          <ShieldCheck size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Tất cả");
+  const normalized = searchText.trim().toLocaleLowerCase("vi-VN");
+  const visible = data.filter(x => (admin || role === "caregiver" || x.owner === "Nguyễn Minh An") &&
+    (statusFilter === "Tất cả" || x.status === statusFilter) &&
+    [x.id,x.elderly,x.type,x.title,x.description].some(v=>String(v||"").toLocaleLowerCase("vi-VN").includes(normalized)));
+  const statuses = [...new Set(data.map(x=>x.status))];
+  const confirmAction = (message, cb) => { if (window.confirm(message)) cb(); };
+  return <>
+    <PageHeader eyebrow={admin ? "ADMIN • YÊU CẦU" : role === "caregiver" ? "CÔNG VIỆC" : "DỊCH VỤ"}
+      title={admin ? "Quản lý yêu cầu chăm sóc" : role === "caregiver" ? "Tìm yêu cầu chăm sóc" : "Yêu cầu của tôi"}
+      desc={admin ? "Quản lý, xem chi tiết và xử lý vi phạm trên hệ thống." : role === "caregiver" ? "Xem danh sách yêu cầu và đăng ký nhận việc." : "Tạo mới, theo dõi trạng thái và chọn người chăm sóc cho gia đình."}
+      action={!admin && role !== "caregiver" && <Button onClick={onAdd}>Tạo yêu cầu</Button>}/>
+    <div className="card table-card">
+      <div className="table-head" style={{display:"flex",flexWrap:"wrap"}}>
+        <label className="search"><Search size={17}/><input aria-label="Tìm kiếm yêu cầu" placeholder="Tìm mã yêu cầu, người cao tuổi, nhu cầu..." value={searchText} onChange={e=>setSearchText(e.target.value)}/></label>
+        <select className="filter-select" aria-label="Lọc trạng thái" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Tất cả</option>{statuses.map(x=><option key={x}>{x}</option>)}</select>
+        <button className="filter-btn" onClick={()=>{setSearchText("");setStatusFilter("Tất cả")}}>Xóa bộ lọc</button>
       </div>
-    </>
-  );
+      <div className="table-scroll"><table><thead><tr><th>Mã</th><th>Người cao tuổi</th><th>Nhu cầu</th><th>Thời gian</th><th>Đăng ký</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+        {visible.map(x=><tr key={x.id}><td><b>{x.id}</b></td><td>{x.elderly}<small>{x.location}</small></td><td>{x.type||x.title}</td><td>{x.date}<small>{x.time}</small></td><td><span className="count-badge">{x.registered||0} người</span></td><td><Status>{x.status}</Status></td><td><div className="actions">
+          <button className="action" title="Xem chi tiết" onClick={()=>onView(x)}><Eye size={16}/></button>
+          {!admin && role === "family" && <>
+            {["Chờ nhận đăng ký","Có người đăng ký"].includes(x.status) && <button className="action" title="Cập nhật yêu cầu" onClick={()=>onEdit(x)}><Edit3 size={16}/></button>}
+            {!["Đã hủy","Đã hoàn thành","Bị từ chối"].includes(x.status) && <button className="action danger" title="Hủy yêu cầu" onClick={()=>confirmAction(`Bạn có chắc muốn hủy yêu cầu ${x.id}?`,()=>onDelete(x.id))}><X size={16}/></button>}
+            {(x.registered>0 || x.status === "Đã chọn người chăm sóc") && <button className="action success" title="Danh sách người chăm sóc đăng ký" onClick={()=>onViewApplicants(x)}><Users size={16}/></button>}
+            {x.status === "Đã chọn người chăm sóc" && <button className="action success" title="Chốt yêu cầu" onClick={()=>confirmAction("Chốt yêu cầu chăm sóc này?",()=>onFinalize(x.id))}><Check size={16}/></button>}
+          </>}
+          {role === "caregiver" && !admin && ["Chờ nhận đăng ký","Có người đăng ký"].includes(x.status) && <>
+            <button className={`action ${x.isApplied ? "warning-action":"success"}`} title={x.isApplied ? "Hủy đăng ký":"Đăng ký nhận yêu cầu"} onClick={()=>confirmAction(x.isApplied ? "Hủy đăng ký nhận ca này?":"Đăng ký nhận ca chăm sóc này?",()=>x.isApplied ? onCancelRegister(x.id):onRegister(x.id))}>{x.isApplied ? <X size={16}/>:<UserCheck size={16}/>}</button>
+            <button className="action warning-action" title="Báo cáo vi phạm" onClick={()=>onReport(x)}><ShieldCheck size={16}/></button>
+          </>}
+          {admin && <button className="action danger" title="Xử lý vi phạm" onClick={onManageReports}><ShieldCheck size={16}/></button>}
+        </div></td></tr>)}
+        {!visible.length && <tr><td colSpan={7}><div className="empty-state"><Search size={30}/><b>Không tìm thấy yêu cầu chăm sóc</b><span>Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.</span></div></td></tr>}
+      </tbody></table></div>
+    </div>
+  </>;
 }
 
 // ============================================================
@@ -635,6 +604,7 @@ function SchedulesPage({ role, admin, data, incidents, onIncident, onAdd, onView
   const ownSchedules = admin ? data : data.filter(x => role === "caregiver" ? x.caregiver === demoName : x.owner === demoName);
   const finishedStatuses = ["Hoàn thành", "Chưa hoàn thành", "Đã hủy", "Bị từ chối"];
   const history = ownSchedules.filter(x => finishedStatuses.includes(x.status));
+  const currentSchedules = ownSchedules.filter(x => !finishedStatuses.includes(x.status));
   const shownHistory = history.filter(x => {
     const matchText = [x.id, x.elderly, x.caregiver, x.date, x.status].join(" ").toLowerCase().includes(historyQuery.trim().toLowerCase());
     const matchStatus = historyStatus === "all" || x.status === historyStatus;
@@ -677,7 +647,7 @@ function SchedulesPage({ role, admin, data, incidents, onIncident, onAdd, onView
               <tr><th>Lịch</th><th>Người cao tuổi</th><th>Người chăm sóc</th><th>Trạng thái</th><th>Thao tác</th></tr>
             </thead>
             <tbody>
-              {ownSchedules.map(x => (
+              {currentSchedules.map(x => (
                 <tr key={x.id}>
                   <td><b>{x.date}</b><small>{x.time}</small></td>
                   <td>{x.elderly}</td>
@@ -725,6 +695,7 @@ function SchedulesPage({ role, admin, data, incidents, onIncident, onAdd, onView
               ))}
             </tbody>
           </table>
+          {currentSchedules.length === 0 && <div className="empty-state"><CalendarDays size={30}/><b>Không có lịch chăm sóc đang xử lý</b><span>Các lịch đã hoàn thành được lưu ở mục Xem lịch sử chăm sóc.</span></div>}
         </div>
         <div className="history-note">
           <Clock3 /> Người chăm sóc: Nhận lịch (Chờ xác nhận → Đã xác nhận) → Check-in (Đang chăm sóc) → Check-out (Chờ xác nhận hoàn thành). Người thân: Xác nhận hoàn thành (Hoàn thành) hoặc Chưa hoàn thành. Có thể hủy/từ chối theo nghiệp vụ.
@@ -875,7 +846,7 @@ function EmergencyContactsPage({ data, onAdd, onEdit, onDelete }) { return <><Pa
 // ============================================================
 // ADMIN - KIỂM DUYỆT BÁO CÁO YÊU CẦU
 // ============================================================
-function ReportsAdmin({ data, onApprove, onReject, onDelete }) { return <><PageHeader eyebrow="ADMIN • KIỂM DUYỆT" title="Báo cáo vi phạm" desc="Tiếp nhận, xem xét và xử lý các báo cáo liên quan đến yêu cầu chăm sóc." /><div className="permission-box"><ShieldCheck size={20} /><div><b>Quy trình xử lý</b><span>Người chăm sóc báo cáo → Admin xem xét → Đã xử lý → yêu cầu hợp lệ hoặc yêu cầu không hợp lệ → tiếp tục quy trình yêu cầu.</span></div></div><div className="card table-card"><TableHead placeholder="Tìm mã báo cáo, mã yêu cầu, người báo cáo..." /><div className="table-scroll"><table><thead><tr><th>Mã báo cáo</th><th>Yêu cầu</th><th>Người báo cáo</th><th>Lý do</th><th>Ngày</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{data.map(x => <tr key={x.id}><td><b>{x.id}</b></td><td>{x.requestId}</td><td>{x.reporter}</td><td>{x.reason}<small>{x.detail}</small></td><td>{x.date}</td><td><Status>{x.status}</Status></td><td><div className="actions">{x.status === "Chờ kiểm duyệt" && <><button className="action success" title="Xử lý báo cáo" onClick={() => onApprove(x.id)}><Check size={16} /></button><button className="action warning-action" title="Yêu cầu không hợp lệ" onClick={() => onReject(x.id)}><X size={16} /></button></>}<button className="action danger" title="Xóa" onClick={() => onDelete(x.id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div></div></> }
+function ReportsAdmin({data,onProcess,onDelete}) {return <><PageHeader eyebrow="ADMIN • KIỂM DUYỆT" title="Báo cáo vi phạm" desc="Xem và xử lý các báo cáo yêu cầu chăm sóc."/><div className="card table-card"><div className="table-scroll"><table><thead><tr><th>Mã báo cáo</th><th>Mã yêu cầu</th><th>Người báo cáo</th><th>Lý do báo cáo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{data.map(x=><tr key={x.id}><td>{x.id}</td><td>{x.requestId}</td><td>{x.reporter}</td><td>{x.reason}<small>{x.detail}</small></td><td><Status>{x.status}</Status></td><td><div className="actions">{x.status!=="Đã xử lý" && <button title="Xử lý vi phạm" className="action success" onClick={()=>onProcess(x)}><ShieldCheck size={16}/></button>}<button className="action danger" title="Xóa báo cáo" onClick={()=>{if(window.confirm("Xóa báo cáo này?"))onDelete(x.id)}}><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div></div></>;}
 
 // ============================================================
 // ADMIN - HÌNH ẢNH & THÔNG TIN WEBSITE
@@ -887,8 +858,8 @@ function MediaWebsitePage({ media, websiteInfo, onMediaAdd, onMediaEdit, onMedia
 // ============================================================
 function Modal({ title, onClose, children }) { return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><div><span className="eyebrow">FORM</span><h2>{title}</h2></div><button className="icon-btn" onClick={onClose}><X /></button></div>{children}</div></div> }
 
-function ModalContent({ type, data, reviews, onSave, onClose, notify }) {
-  const [form, setForm] = useState(data || {});
+function ModalContent({ type, data, reviews, elderly = [], caregivers = [], role, onAccept, onReject, onSave, onClose, notify }) {
+  const [form, setForm] = useState(type === "violation-process" ? {} : (data || {}));
   const update = (k, v) => setForm({ ...form, [k]: v });
 
   if (type === "care-admin-detail") return <div className="account-detail"><div className="detail-hero"><div className="avatar detail-avatar"><img src={caregiverImage(data?.id)} alt={data?.name} /></div><div><span className="eyebrow">HỒ SƠ CHĂM SÓC MÃ #{data?.id}</span><h2>{data?.name}</h2><div className="detail-sub">{data?.area}</div></div><Status>{data?.status}</Status></div><div className="detail-grid"><Info label="Kinh nghiệm" value={data?.exp} /><Info label="Thời gian làm việc" value={data?.time} /><Info label="Khu vực hoạt động" value={data?.area} /><Info label="Điểm đánh giá" value={`⭐ ${data?.rating} (${data?.reviews} lượt)`} /><Info label="Kỹ năng chuyên môn" value={data?.skills} /><Info label="Chứng chỉ" value={data?.certificate || "Chưa cập nhật"} /><Info label="Mức giá" value={data?.price || "Chưa cập nhật"} /><Info label="Phạm vi công việc" value={data?.scope || "Chưa cập nhật"} /><Info label="Lịch rảnh" value={data?.availability || "Chưa cập nhật"} /><Info label="Số điện thoại" value={data?.phone || "Chưa cập nhật"} /><Info label="Email liên hệ" value={data?.email || "Chưa cập nhật"} /><Info label="Ca đã hoàn thành" value={data?.completedJobs || "Chưa cập nhật"} /></div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
@@ -903,10 +874,13 @@ function ModalContent({ type, data, reviews, onSave, onClose, notify }) {
   if (type === "elderly-detail") return <div className="account-detail"><div className="detail-hero"><div className="avatar detail-avatar"><HeartPulse size={40} color="#ff4b4b" /></div><div><span className="eyebrow">HỒ SƠ MÃ #{data?.id}</span><h2>{data?.name}</h2><div className="detail-sub">{data?.address}</div></div><Status>{data?.health}</Status></div><div className="detail-grid"><Info label="Tuổi" value={data?.age} /><Info label="Giới tính" value={data?.gender} /><Info label="Sức khỏe" value={data?.health} /><Info label="Số điện thoại" value={data?.phone} /><Info label="Người thân quản lý" value={data?.guardian || "Chưa cập nhật"} /><Info label="Mối quan hệ" value={data?.relation} /><Info label="Hồ sơ đính kèm" value={data?.attachment || "Chưa có"} /></div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
 
   if (type === "request-applicants") {
-    const dummyApplicants = [{ name: "Trần Minh Anh", exp: "4 năm", rating: 4.8, reviews: 64, img: imageAssets.caregiver2 }, { name: "Lê Thị Hương", exp: "8 năm", rating: 5.0, reviews: 112, img: imageAssets.caregiver3 }, { name: "Nguyễn Thị Lan", exp: "5 năm", rating: 4.9, reviews: 86, img: imageAssets.caregiver1 }];
-    const applicants = dummyApplicants.slice(0, data?.registered || 1);
-    return <div className="applicants-modal"><p style={{ marginBottom: 15, color: "#666" }}>Yêu cầu <b>{data?.id}</b> hiện có {data?.registered} người chăm sóc muốn nhận ca:</p><div className="care-grid" style={{ gridTemplateColumns: "1fr", maxHeight: "400px", overflowY: "auto", paddingRight: "5px" }}>{applicants.map((app, idx) => <div key={idx} className="care-card" style={{ display: 'flex', alignItems: 'center', gap: 15, padding: 15, textAlign: 'left', flexDirection: 'row' }}><div className="avatar big photo-avatar" style={{ margin: 0 }}><img src={app.img} alt={app.name} /></div><div style={{ flex: 1 }}><h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>{app.name}</h3><div className="rating">⭐ {app.rating} ({app.reviews} đánh giá) · {app.exp} kinh nghiệm</div></div><div style={{ display: 'flex', gap: 10, flexDirection: 'column' }}><Button kind="outline" onClick={() => notify(`Đang mở hồ sơ chi tiết của ${app.name}`)}>Xem hồ sơ</Button><Button icon={Check} onClick={() => { onAccept(data.id); notify(`Đã chọn ${app.name} làm người chăm sóc!`); onClose(); }}>Chọn</Button></div></div>)}</div><div className="modal-actions" style={{ marginTop: 20 }}><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
+    const names = data?.applicants || [];
+    return <div className="modal-form"><p>Yêu cầu <b>{data?.id}</b> — {names.length} người đăng ký</p>
+      {names.length ? names.map(name => { const c=caregivers.find(c=>c.name===name);return <div key={name} className="care-card" style={{marginBottom:12,display:"flex",gap:15,alignItems:"center"}}><div className="avatar big photo-avatar"><img src={caregiverImage(c?.id)} alt={name}/></div><div style={{flex:1}}><b>{name}</b><small style={{display:"block",marginTop:5}}>{c?.exp||"Đang cập nhật"} · ⭐ {c?.rating||"—"}</small>{data?.selectedCaregiver===name && <Status>Đã được chọn</Status>}</div><div className="actions">{!data?.selectedCaregiver && <><button title="Chấp nhận" className="action success" onClick={()=>{if(window.confirm(`Chấp nhận ${name}?`)){onAccept(data.id,name);onClose();}}}><Check size={16}/></button><button title="Từ chối" className="action danger" onClick={()=>{if(window.confirm(`Từ chối ${name}?`)){onReject(data.id,name);onClose();}}}><X size={16}/></button></>}</div></div>}) : <div className="empty-state">Chưa có người chăm sóc đăng ký.</div>}
+      <div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
   }
+
+  if (type === "violation-process") return <Form onSave={()=>onSave(form)} onClose={onClose}><p className="full">Báo cáo <b>{data?.id}</b> · Yêu cầu <b>{data?.requestId}</b></p><label className="field full"><span>Lý do xử lý *</span><textarea value={form.reason||""} onChange={e=>update("reason",e.target.value)} placeholder="Nhập lý do xử lý"/></label><label className="field full"><span>Hình thức xử lý *</span><select value={form.action||""} onChange={e=>update("action",e.target.value)}><option value="">Chọn hình thức xử lý</option><option value="Từ chối yêu cầu">Từ chối yêu cầu</option><option value="Cảnh báo">Cảnh báo và giữ nguyên yêu cầu</option></select></label></Form>;
 
   if (type === "incident") return <div><div className="modal-form"><p style={{ marginTop: 0, color: "#64736e" }}>Lịch <b>{data?.id}</b> · {data?.elderly} · {data?.date} ({data?.time})</p><label className="field"><span>Loại sự cố *</span><select value={form.reason || ""} onChange={e => update("reason", e.target.value)}><option value="">Chọn loại sự cố</option>{["Sức khỏe người cao tuổi", "Tai nạn / chấn thương", "Không thể thực hiện chăm sóc", "Sự cố về thời gian", "Sự cố an toàn", "Khác"].map(x => <option key={x} value={x}>{x}</option>)}</select></label><label className="field"><span>Mô tả sự cố *</span><textarea value={form.detail || ""} onChange={e => update("detail", e.target.value)} placeholder="Mô tả thời điểm, tình huống và hướng xử lý..." rows={5}/></label></div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button><Button icon={Send} onClick={() => { if (!form.reason || !form.detail?.trim()) { notify("Vui lòng chọn loại sự cố và nhập mô tả"); return; } onSave(form); }}>Gửi báo cáo</Button></div></div>;
 
@@ -922,7 +896,16 @@ function ModalContent({ type, data, reviews, onSave, onClose, notify }) {
 
   if (type === "care-profile") return <Form onSave={() => onSave(form)} onClose={onClose}><Field label="Họ tên" value={form.name || ""} onChange={e => update("name", e.target.value)} /><Field label="Kinh nghiệm" value={form.exp || ""} onChange={e => update("exp", e.target.value)} /><Field label="Khu vực" value={form.area || ""} onChange={e => update("area", e.target.value)} /><Field label="Kỹ năng" value={form.skills || ""} onChange={e => update("skills", e.target.value)} /><Field label="Thời gian làm việc" value={form.time || ""} onChange={e => update("time", e.target.value)} /><Field label="Chứng chỉ" value={form.certificate || ""} onChange={e => update("certificate", e.target.value)} /><Field label="Mức giá" value={form.price || ""} onChange={e => update("price", e.target.value)} /><Field label="Phạm vi công việc" value={form.scope || ""} onChange={e => update("scope", e.target.value)} /><Field label="Lịch rảnh" value={form.availability || ""} onChange={e => update("availability", e.target.value)} /><Field label="Hồ sơ đính kèm" value={form.attachment || ""} onChange={e => update("attachment", e.target.value)} /></Form>;
 
-  if (type === "request") return <Form onSave={() => onSave(form)} onClose={onClose}><SelectField label="Người cao tuổi" value={form.elderly || ""} onChange={e => update("elderly", e.target.value)} options={["Nguyễn Văn Bình", "Trần Thị Hoa", "Lê Văn Nam"]} /><Field label="Tiêu đề yêu cầu" value={form.title || ""} onChange={e => update("title", e.target.value)} /><Field label="Mô tả nhu cầu chăm sóc" value={form.description || ""} onChange={e => update("description", e.target.value)} /><Field label="Địa điểm chăm sóc" value={form.location || ""} onChange={e => update("location", e.target.value)} /><Field label="Thời gian bắt đầu" value={form.startTime || ""} type="datetime-local" onChange={e => update("startTime", e.target.value)} /><Field label="Thời gian kết thúc" value={form.endTime || ""} type="datetime-local" onChange={e => update("endTime", e.target.value)} /><Field label="Yêu cầu kỹ năng" value={form.requiredSkills || ""} onChange={e => update("requiredSkills", e.target.value)} /><Field label="Mức giá dự kiến" value={form.expectedPrice || ""} type="number" onChange={e => update("expectedPrice", e.target.value)} /></Form>;
+  if (type === "request") return <Form onSave={()=>onSave(form)} onClose={onClose}>
+    <SelectField label="Người cao tuổi *" value={form.elderly ?? elderly[0]?.name ?? ""} onChange={e=>update("elderly",e.target.value)} options={elderly.map(x=>x.name)}/>
+    <Field label="Tiêu đề yêu cầu *" value={form.title||""} onChange={e=>update("title",e.target.value)} />
+    <label className="field full"><span>Mô tả nhu cầu chăm sóc *</span><textarea value={form.description||""} onChange={e=>update("description",e.target.value)}/></label>
+    <Field label="Địa điểm chăm sóc *" value={form.location||""} onChange={e=>update("location",e.target.value)}/>
+    <Field label="Thời gian bắt đầu *" type="datetime-local" value={form.startTime||""} onChange={e=>update("startTime",e.target.value)}/>
+    <Field label="Thời gian kết thúc *" type="datetime-local" value={form.endTime||""} onChange={e=>update("endTime",e.target.value)}/>
+    <label className="field full"><span>Yêu cầu đặc biệt</span><textarea value={form.requiredSkills||""} onChange={e=>update("requiredSkills",e.target.value)}/></label>
+    <Field label="Mức giá dự kiến (VNĐ)" type="number" value={form.expectedPrice??""} onChange={e=>update("expectedPrice",e.target.value)}/>
+  </Form>;
 
   if (type === "schedule") return <Form onSave={() => onSave(form)} onClose={onClose}><SelectField label="Mã yêu cầu chăm sóc" value={form.requestId || ""} onChange={e => update("requestId", e.target.value)} options={["YC001", "YC002", "YC003"]} /><SelectField label="Người chăm sóc" value={form.caregiver || ""} onChange={e => update("caregiver", e.target.value)} options={["Nguyễn Thị Lan", "Trần Minh Anh", "Lê Thị Hương"]} /><Field label="Ngày bắt đầu" value={form.startDate || ""} type="date" onChange={e => update("startDate", e.target.value)} /><Field label="Ngày kết thúc" value={form.endDate || ""} type="date" onChange={e => update("endDate", e.target.value)} /><Field label="Giờ bắt đầu" value={form.startTime || ""} type="time" onChange={e => update("startTime", e.target.value)} /><Field label="Giờ kết thúc" value={form.endTime || ""} type="time" onChange={e => update("endTime", e.target.value)} /></Form>;
 
@@ -930,7 +913,8 @@ function ModalContent({ type, data, reviews, onSave, onClose, notify }) {
 
   if (type === "user") return <Form onSave={() => onSave(form)} onClose={onClose}><Field label="Họ tên" value={form.name || ""} onChange={e => update("name", e.target.value)} /><Field label="Email" value={form.email || ""} type="email" onChange={e => update("email", e.target.value)} /><Field label="Số điện thoại" value={form.phone || ""} onChange={e => update("phone", e.target.value)} /><SelectField label="Vai trò" value={form.role || "Người thân"} onChange={e => update("role", e.target.value)} options={["Người thân", "Người cần chăm sóc", "Người chăm sóc", "Admin"]} /><SelectField label="Trạng thái" value={form.status || "Hoạt động"} onChange={e => update("status", e.target.value)} options={["Hoạt động", "Đã duyệt", "Chờ duyệt", "Khóa"]} /></Form>;
 
-  if (type === "request-detail") return <div className="modal-view request-detail"><div className="request-icon"><ClipboardList /></div><h2>{data?.id}</h2><p className="detail-sub">{data?.elderly} • {data?.type}</p><div className="detail-grid"><Info label="Địa điểm" value={data?.location} /><Info label="Ngày" value={data?.date} /><Info label="Thời gian" value={data?.time} /><Info label="Người đăng ký" value={`${data?.registered || 0} người`} /><Info label="Trạng thái" value={data?.status} /><Info label="Kiểm duyệt" value={data?.moderation || "Chưa có báo cáo"} /></div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
+  if (type === "request-detail") return <div className="account-detail"><div className="detail-hero"><div className="request-icon"><ClipboardList/></div><div><h2>{data?.id}</h2><p className="detail-sub">{data?.title||data?.type}</p></div><Status>{data?.status}</Status></div><div className="detail-grid">
+    <Info label="Người cao tuổi" value={data?.elderly}/><Info label="Tiêu đề" value={data?.title||data?.type}/><Info label="Mô tả nhu cầu" value={data?.description||"Chưa cập nhật"}/><Info label="Địa điểm" value={data?.location}/><Info label="Ngày" value={data?.date}/><Info label="Thời gian" value={data?.time}/><Info label="Yêu cầu đặc biệt" value={data?.requiredSkills||"Không có"}/><Info label="Mức giá dự kiến" value={data?.expectedPrice==null?"Chưa cập nhật":`${data.expectedPrice} VNĐ`}/><Info label="Số người đăng ký" value={data?.registered||0}/><Info label="Người chăm sóc được chọn" value={data?.selectedCaregiver||"Chưa chọn"}/><Info label="Trạng thái" value={data?.status}/></div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
 
   if (type === "post-detail") return <div className="modal-view post-detail"><div className="post-cover"><BookOpen /></div><span className="eyebrow">{data?.category}</span><h2>{data?.title}</h2><p className="detail-sub">{data?.author} • {data?.date}</p><div className="post-body">Nội dung bài viết được hiển thị tại đây để Admin xem trước trước khi chỉnh sửa hoặc đăng tải.</div><div className="modal-actions"><Button kind="outline" icon={X} onClick={onClose}>Đóng</Button></div></div>;
 
